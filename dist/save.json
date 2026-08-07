@@ -1,0 +1,31 @@
+{
+  "level": 1,
+  "exp": 0,
+  "gold": 0,
+  "stage": 1,
+  "total_keys": 0,
+  "kills": 0,
+  "finished": false,
+  "attr_points": 0,
+  "skill_points": 0,
+  "attrs": {
+    "str": 0,
+    "agi": 0,
+    "int": 0,
+    "luk": 0
+  },
+  "skill_lv": {},
+  "pos_x": null,
+  "pos_y": null,
+  "class_id": null,
+  "weapon": null,
+  "accessory": null,
+  "inventory": [],
+  "achievements": [],
+  "muted": false,
+  "max_combo": 0,
+  "boss_kills": 0,
+  "best_rarity": 0,
+  "scale": 0.5,
+  "difficulty": "硬核"
+}
