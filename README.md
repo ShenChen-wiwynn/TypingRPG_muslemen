@@ -63,16 +63,26 @@ pip install pyinstaller pynput pillow
 等價的手動指令：
 
 ```bash
-pyinstaller --onefile --noconsole --name TypingRPG --add-data "assets;assets" --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 typing_rpg.py
+pyinstaller --onefile --noconsole --name TypingRPG --icon "TypingRPG.ico" --add-data "assets;assets" --hidden-import pynput.keyboard._win32 --hidden-import pynput.mouse._win32 typing_rpg.py
 ```
 
 **`--add-data "assets;assets"` 不能少** —— 少了它，背景圖和所有角色／怪物貼圖都不會進 exe，遊戲會安靜地退回內建手繪版，看起來像「美術全部不見了」。
+
+### exe 圖示
+
+`--icon "TypingRPG.ico"` 指定 exe 圖示，目前用的是專案根目錄的 `TypingRPG.ico`（32×32、四角透明的像素勇者）。
+
+**ico 一定要放在專案根目錄，不要放 `dist\`** —— `build.bat` 每次打包的第一步就是把整個 `dist\` 刪掉，圖示放那裡會被自己的打包腳本清掉。
+
+想換圖示就直接覆蓋 `TypingRPG.ico` 再重打包。要在檔案總管的「大圖示」檢視也清晰的話，ico 最好包含 16／32／48／256 多種尺寸（目前只有 32×32，Windows 放大時會糊掉）。
+
+改完圖示後檔案總管可能還是顯示舊圖 —— 那是圖示快取，不是打包失敗，換個資料夾看或重開檔案總管即可。
 
 其他注意事項：
 
 - 改了 `typing_rpg.py` 之後 **exe 不會自己更新**，要重跑 `build.bat`。
 - `build\` 是打包中間產物，可以隨時整個刪掉。
-- 打包前先把遊戲關掉，不然 `dist\TypingRPG.exe` 會被鎖住寫不進去。
+- **打包前先把遊戲關掉**，不然 `dist\TypingRPG.exe` 會被鎖住，PyInstaller 會噴 `PermissionError: [WinError 5] 存取被拒`。
 
 ---
 
@@ -112,7 +122,27 @@ pyinstaller --onefile --noconsole --name TypingRPG --add-data "assets;assets" --
 
 ---
 
-## 5. 調平衡數值
+## 5. 開機自動啟動
+
+已經設定好了：在 Windows 的「啟動」資料夾放了一個捷徑，每次登入就會自動把遊戲叫起來。
+
+捷徑位置（可直接貼到檔案總管網址列，或按 Win+R 輸入 `shell:startup`）：
+
+```
+C:\Users\11411612\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\打字 RPG.lnk
+```
+
+指向 `D:\TypingRPG_muslemen\dist\TypingRPG.exe`，工作目錄設在 `dist\`（存檔才會寫在那裡）。
+
+- **想暫時停用**：Windows 設定 →「應用程式」→「啟動」，把「打字 RPG」關掉。
+- **想永久移除**：直接把上面那個 `.lnk` 刪掉。
+- **想換成別份 exe 或原始碼版**：刪掉舊捷徑，對新目標按右鍵「建立捷徑」再丟進 `shell:startup`。跑原始碼版的話捷徑目標要寫 `pythonw.exe "完整路徑\typing_rpg.py"`。
+- 開機後大約要等 5～8 秒才會出現（單檔 exe 要先解壓到暫存區），不是沒啟動。
+- 換位置或改資料夾名稱後捷徑就會失效，要重新建立。
+
+---
+
+## 6. 調平衡數值
 
 所有數值集中在 `typing_rpg.py` 開頭的「平衡數值」區（約第 57～92 行），改完存檔重開即可（跑 exe 的話要重新打包）。
 
@@ -133,12 +163,14 @@ pyinstaller --onefile --noconsole --name TypingRPG --add-data "assets;assets" --
 
 ---
 
-## 6. 專案結構
+## 7. 專案結構
 
 ```
-TypingRPG\
+TypingRPG_muslemen\
 ├─ typing_rpg.py      主程式（單檔）
 ├─ build.bat          打包腳本
+├─ TypingRPG.ico      exe 圖示（放根目錄，不能放 dist\）
+├─ README.md          這份文件
 ├─ save.json          你的存檔（跑原始碼時）
 ├─ assets\
 │  ├─ forest_bg.png   HUD 背景
@@ -151,7 +183,7 @@ TypingRPG\
 
 ---
 
-## 7. 改程式時的兩個地雷
+## 8. 改程式時的兩個地雷
 
 留給未來的自己：
 

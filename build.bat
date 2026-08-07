@@ -13,7 +13,9 @@ if exist TypingRPG.spec del /q TypingRPG.spec
 echo [2/2] 開始打包...
 REM  --add-data "assets;assets" 把背景圖 / 角色 / 怪物貼圖內嵌進 exe，
 REM  少了它 exe 會退回內建手繪版（res_path 會先找 PyInstaller 的 _MEIPASS）
+REM  --icon 指定 exe 圖示；ico 要放在專案根目錄，放 dist\ 會被上面的清理步驟刪掉
 pyinstaller --onefile --noconsole --name TypingRPG ^
+    --icon "TypingRPG.ico" ^
     --add-data "assets;assets" ^
     --hidden-import pynput.keyboard._win32 ^
     --hidden-import pynput.mouse._win32 ^

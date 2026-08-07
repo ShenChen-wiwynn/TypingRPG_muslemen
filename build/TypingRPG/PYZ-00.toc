@@ -1,4 +1,4 @@
-('C:\\Users\\11411612\\TypingRPG\\build\\TypingRPG\\PYZ-00.pyz',
+('D:\\TypingRPG_muslemen\\build\\TypingRPG\\PYZ-00.pyz',
  [('PIL',
    'C:\\Users\\11411612\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PIL\\__init__.py',
    'PYMODULE'),
