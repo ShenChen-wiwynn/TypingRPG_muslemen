@@ -112,6 +112,13 @@ BOSS_POS = (480, 150)
 MON_X = MON_SLOTS[0][0]     # 相容：特效/浮字預設參考前排
 MON_FY = MON_SLOTS[0][1]
 
+# 打擊特效（assets/fx/<職業>_proj.png 投射物、<職業>_hit.png 命中爆裂）
+FX_PROJ_H = 30              # 投射物邏輯高度
+FX_HIT_H = 54               # 命中爆裂邏輯高度
+FX_PROJ_SEC = 0.13          # 投射物飛行時間（秒）
+FX_HIT_SEC = 0.30           # 命中爆裂持續（秒）
+HERO_HAND = (30, -70)       # 投射物起點：相對玩家腳底的偏移
+
 
 def _win_w():
     return int(BAR_W * S)
@@ -713,6 +720,10 @@ class TypingRPG:
         self._cls_src = {}           # 職業角色 PIL 圖
         self._mon_src = {}           # 怪物 PIL 圖
         self._spr_cache = {}         # 依縮放快取的 PhotoImage
+        self._fx_src = {}            # 打擊特效 PIL 圖（<職業>_proj / _hit）
+        self._fx_cache = {}          # 依縮放+淡出快取的 PhotoImage
+        self.projectiles = []        # 飛行中的投射物
+        self.hitfx = []              # 命中爆裂
         self._build_window()
         self._purge_unusable_weapons()        # 舊存檔裡不符職業的裝備開檔就清掉
         self._start_listener()
@@ -758,6 +769,7 @@ class TypingRPG:
         self._drag = None
         self._load_bg()
         self._load_sprites()
+        self._load_fx()
         self._draw_background()
 
     # ---------- 角色 / 怪物貼圖 ----------
@@ -782,6 +794,46 @@ class TypingRPG:
                     self._mon_src[k] = Image.open(p).convert("RGBA")
                 except Exception:
                     pass
+
+    def _load_fx(self):
+        """載入各職業打擊特效；缺圖時該職業自動退回原本的火花效果。"""
+        try:
+            from PIL import Image
+        except ImportError:
+            return
+        fdir = res_path(os.path.join("assets", "fx"))
+        for k in set(CLASS_SPRITE.values()):
+            for suf in ("proj", "hit"):
+                p = os.path.join(fdir, f"{k}_{suf}.png")
+                if os.path.exists(p):
+                    try:
+                        self._fx_src[f"{k}_{suf}"] = Image.open(p).convert("RGBA")
+                    except Exception:
+                        pass
+
+    def _fx_img(self, key, target_h_logical, fade=1.0):
+        """特效 PhotoImage。tkinter 沒有逐次繪製的透明度，所以把淡出量化成 5 階
+        後連同尺寸一起快取，每個特效最多只會產生 5 張圖。"""
+        src = self._fx_src.get(key)
+        if src is None:
+            return None
+        ph = max(1, int(round(target_h_logical * S)))
+        step = max(1, min(5, int(round(fade * 5))))
+        ck = (key, ph, step)
+        img = self._fx_cache.get(ck)
+        if img is None:
+            try:
+                from PIL import Image, ImageTk
+            except ImportError:
+                return None
+            iw, ih = src.size
+            pw = max(1, int(round(iw * ph / ih)))
+            im = src.resize((pw, ph), Image.LANCZOS)
+            if step < 5:
+                im.putalpha(im.getchannel("A").point(lambda v: v * step // 5))
+            img = ImageTk.PhotoImage(im)
+            self._fx_cache[ck] = img
+        return img
 
     def _spr(self, src_dict, key, target_h_logical):
         """取得依目前縮放調整後的 PhotoImage（有快取）；無圖回傳 None。"""
@@ -1029,6 +1081,8 @@ class TypingRPG:
         self.skill_gauge = 0.0
         self.floats = []
         self.sparks = []
+        self.projectiles = []
+        self.hitfx = []
         self.banner = ("新的冒險開始！", 1.4)
         self._disp_exp = 0
         self._last_stage_serial = self.state.stage_serial
@@ -1073,6 +1127,7 @@ class TypingRPG:
         self.root.geometry(f"{neww}x{newh}+{ox}+{new_y}")
         self.canvas.config(width=neww, height=newh)
         self._spr_cache.clear()                          # 貼圖依新縮放重算
+        self._fx_cache.clear()                           # 特效同上
         self._render_bg_photo()                          # 背景圖依新尺寸重裁
         self._draw_background()                          # 背景需依新縮放重畫
         self.state.pos_x, self.state.pos_y = ox, new_y
@@ -1246,6 +1301,7 @@ class TypingRPG:
         tgt = s.target()
         tx, ty = self._mon_pos(s.monsters.index(tgt)) if tgt in s.monsters else (MON_X, MON_FY)
         self._spawn_sparks(tx, ty - 16)
+        self._spawn_attack_fx(tx, ty - 16)
         self._add_float(tx + random.uniform(-14, 14), ty - 30,
                         f"{total_dmg:,}" + ("!" if crit_any else ""),
                         GOLD if crit_any else WHITE,
@@ -1281,6 +1337,7 @@ class TypingRPG:
                                 f"{max(1, per_target // hits):,}", color,
                                 size=16, life=0.95, crit=True)
             self._spawn_sparks(tx, ty - 16)
+            self._spawn_attack_fx(tx, ty - 16)
         self._add_float(MON_X, MON_FY - 52, name + ("（範圍）" if aoe else ""),
                         color, size=13, life=1.1)
         return total
@@ -1343,6 +1400,17 @@ class TypingRPG:
     def _hit_color(self):
         return HIT_STYLE.get(class_group(self.state.class_id), "#ffcf47")
 
+    def _spawn_attack_fx(self, x=None, y=None):
+        """從玩家手部朝目標射出投射物，抵達後轉成命中爆裂。"""
+        key = class_sprite_key(self.state.class_id)
+        if (key + "_proj") not in self._fx_src and (key + "_hit") not in self._fx_src:
+            return
+        x = MON_X if x is None else x
+        y = (MON_FY - 16) if y is None else y
+        self.projectiles.append({"key": key, "t": 0.0,
+                                 "x0": HERO_X + HERO_HAND[0], "y0": HERO_FY + HERO_HAND[1],
+                                 "x1": x, "y1": y})
+
     def _spawn_sparks(self, x=None, y=None):
         x = MON_X if x is None else x
         y = (MON_FY - 16) if y is None else y
@@ -1398,6 +1466,21 @@ class TypingRPG:
             if p["life"] > 0:
                 ns.append(p)
         self.sparks = ns
+        # 投射物飛抵目標 → 轉成命中爆裂
+        np_ = []
+        for p in self.projectiles:
+            p["t"] += dt
+            if p["t"] >= FX_PROJ_SEC:
+                self.hitfx.append({"key": p["key"], "x": p["x1"], "y": p["y1"], "t": 0.0})
+            else:
+                np_.append(p)
+        self.projectiles = np_
+        nh = []
+        for h in self.hitfx:
+            h["t"] += dt
+            if h["t"] < FX_HIT_SEC:
+                nh.append(h)
+        self.hitfx = nh
 
     # ============ 繪圖基礎（皆以「邏輯座標」呼叫，內部乘上縮放 S） ============
     # 低階（可指定 tag/寬度）——所有畫布繪製都應經過這些，才會一起縮放
@@ -1724,6 +1807,22 @@ class TypingRPG:
             if boss:
                 self._text(cx, by + 13, f"{max(0,int(m['disp'])):,}/{m['max_hp']:,}",
                            size=6, outline="")
+
+        # 打擊特效（畫在怪物之上）
+        for p in self.projectiles:
+            img = self._fx_img(p["key"] + "_proj", FX_PROJ_H)
+            if img is not None:
+                k = min(1.0, p["t"] / FX_PROJ_SEC)
+                self.canvas.create_image((p["x0"] + (p["x1"] - p["x0"]) * k) * S,
+                                         (p["y0"] + (p["y1"] - p["y0"]) * k) * S,
+                                         image=img, tags="dyn")
+        for h in self.hitfx:
+            # 淡出量化成 5 階，尺寸跟著同一階走，快取才不會爆
+            step = max(1, min(5, int(round((1.0 - h["t"] / FX_HIT_SEC) * 5))))
+            img = self._fx_img(h["key"] + "_hit",
+                               FX_HIT_H * (1.2 - 0.4 * step / 5.0), step / 5.0)
+            if img is not None:
+                self.canvas.create_image(h["x"] * S, h["y"] * S, image=img, tags="dyn")
 
         # 左上：關卡進度 + 等級 + 職業（各自一行，避免擁擠）
         stage_txt = ("⚔ 最終BOSS戰" if boss else f"🗺 {s.stage}/{FINAL_STAGE}")
