@@ -744,7 +744,8 @@ class TypingRPG:
         wb = self._work_area_bottom()
         x = self.state.pos_x if self.state.pos_x is not None else (sw - _win_w()) // 2
         y = self.state.pos_y if self.state.pos_y is not None else wb - _win_h() - 8
-        x = max(0, min(x, sw - _win_w()))
+        x, y = self._clamp_to_desktop(x, y)
+        self.state.pos_x, self.state.pos_y = x, y
         r.geometry(f"{_win_w()}x{_win_h()}+{x}+{y}")
         self.canvas = tk.Canvas(r, width=_win_w(), height=_win_h(), bg=SKY_TOP,
                                 highlightthickness=0)
@@ -883,6 +884,24 @@ class TypingRPG:
             return rect.bottom
         except Exception:
             return self.root.winfo_screenheight() - 48
+
+    def _virtual_desktop(self):
+        """整個桌面（含多螢幕）的 (left, top, right, bottom)。"""
+        try:
+            import ctypes
+            g = ctypes.windll.user32.GetSystemMetrics
+            l, t, w, h = g(76), g(77), g(78), g(79)   # SM_*VIRTUALSCREEN
+            if w > 0 and h > 0:
+                return l, t, l + w, t + h
+        except Exception:
+            pass
+        return 0, 0, self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+
+    def _clamp_to_desktop(self, x, y):
+        """把座標夾回桌面範圍，避免解析度/螢幕數量改變後視窗跑到看不見的地方。"""
+        l, t, r, b = self._virtual_desktop()
+        w, h = _win_w(), _win_h()
+        return max(l, min(x, r - w)), max(t, min(y, b - h))
 
     def _drag_start(self, e):
         self._drag = (e.x_root, e.y_root, self.root.winfo_x(), self.root.winfo_y())
