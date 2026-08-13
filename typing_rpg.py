@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-打字 RPG - 工作列上方的掛機養成 HUD（楓之谷風·原創像素）
+打字 RPG - 工作列上方的掛機養成 HUD（原創像素）
 ==========================================================
 一條停靠在螢幕底部（工作列上方）的無邊框橫條，明亮 2D 橫向卷軸風。
 在「任何軟體」打字都會累積戰力，每敲一鍵 = 對怪物揮一刀，
@@ -50,7 +50,6 @@ def res_path(rel):
 
 
 SAVE_FILE = os.path.join(app_dir(), "save.json")
-BG_IMAGE = res_path(os.path.join("assets", "forest_bg.png"))
 BG_CROP_Y = 0.58           # 取原圖縱向此比例中心的橫帶當背景（0=上緣, 1=下緣）
 PANEL_BG = res_path(os.path.join("assets", "panel_bg.png"))   # 背包/商店背景圖
 
@@ -67,8 +66,7 @@ MONSTER_BASE_GOLD = 3
 MONSTER_GOLD_GROWTH = 1.12
 EXP_BASE = 18
 EXP_GROWTH = 1.32
-# 一場遊戲：打倒 (FINAL_STAGE-1) 隻小怪後，第 FINAL_STAGE 關為最終 BOSS 羊頭人
-FINAL_STAGE = 40
+# 一場遊戲的關卡由 ZONES 串起來（見下方）；FINAL_STAGE = 最後一張地圖的最後一關
 FINAL_BOSS_HP_MULT = 12
 FINAL_BOSS_EXP_MULT = 20
 FINAL_BOSS_GOLD_MULT = 20
@@ -108,7 +106,7 @@ HERO_FY = 148              # 玩家腳底 y（靠近鏡頭 → 偏下、偏大�
 HERO_SCALE = 1.35
 # 每關三隻小怪的位置（前→後），整體偏左（避開右上角提示）
 MON_SLOTS = [(365, 106), (495, 94), (622, 84)]
-BOSS_POS = (480, 150)
+BOSS_POS = (480, 130)      # BOSS 腳底 y：名稱/血條/血量數字要畫在腳下，需留約 23px
 MON_X = MON_SLOTS[0][0]     # 相容：特效/浮字預設參考前排
 MON_FY = MON_SLOTS[0][1]
 
@@ -140,16 +138,52 @@ MKINDS = {
     "mermaid":     ("ghost", "#57d3c0"),
     "caterpillar": ("snail", "#a7d84b"),
     "lizard":      ("stump", "#7ab24a"),
-    "goathead":    ("demon", "#8a6a3a"),   # 最終 BOSS 羊頭人（暫用惡魔像素替身）
+    "goathead":    ("demon", "#8a6a3a"),   # 魔法森林 BOSS 羊頭人（暫用惡魔像素替身）
+    # ---- 翠綠草原 ----
+    "grass_slime": ("slime", "#6fcf3f"),
+    "mush_red":    ("mushroom", "#e0483c"),
+    "mush_brown":  ("mushroom", "#8a5a3a"),
+    "red_slime":   ("slime", "#ff7fb0"),
+    "tiger":       ("pig", "#e8a33c"),
+    "sheep":       ("pig", "#efe6cf"),
+    "rockgolem":   ("golem", "#9aa0a6"),
+    "windking":    ("ghost", "#7fe3a8"),   # 最終 BOSS 風之精靈王
 }
-# 魔法森林小怪（第 1..FINAL_STAGE-1 關隨機出現、逐關變強）
-MONSTERS = [
-    ("slime", "史萊姆"), ("fairy", "湖畔精靈"), ("butterfly", "蝴蝶精"),
-    ("goblin", "哥布林"), ("mermaid", "人魚"), ("caterpillar", "毛蟲"),
-    ("lizard", "蜥蜴"), ("skeleton", "骷髏士兵"), ("water", "水怪"),
+
+# ====================== 地圖 ======================
+# 依序闖關：打完一張地圖的 BOSS（第 end 關）就進入下一張。
+# end   = 該地圖的 BOSS 關卡編號
+# bg    = assets/ 底下的背景圖檔名
+# crop_y= 背景取縱向橫帶的位置（0=上緣, 1=下緣），依各圖構圖微調
+ZONES = [
+    {
+        "key": "forest", "name": "魔法森林", "bg": "forest_bg.png",
+        "crop_y": 0.58, "end": 40, "boss": ("goathead", "羊頭人"),
+        "monsters": [
+            ("slime", "史萊姆"), ("fairy", "湖畔精靈"), ("butterfly", "蝴蝶精"),
+            ("goblin", "哥布林"), ("mermaid", "人魚"), ("caterpillar", "毛蟲"),
+            ("lizard", "蜥蜴"), ("skeleton", "骷髏士兵"), ("water", "水怪"),
+        ],
+    },
+    {
+        "key": "plain", "name": "翠綠草原", "bg": "plain_bg.png",
+        "crop_y": 0.62, "end": 80, "boss": ("windking", "風之精靈王"),
+        "monsters": [
+            ("grass_slime", "草原史萊姆"), ("mush_red", "紅蘑菇"),
+            ("mush_brown", "褐蘑菇"), ("red_slime", "紅史萊姆"),
+            ("tiger", "斑紋幼虎"), ("sheep", "綿羊"), ("rockgolem", "石頭巨人"),
+        ],
+    },
 ]
-# 最終 BOSS（第 FINAL_STAGE 關）
-FINAL_BOSS = ("goathead", "羊頭人")
+FINAL_STAGE = ZONES[-1]["end"]
+
+
+def zone_of(stage):
+    """關卡編號 → 所屬地圖。"""
+    for z in ZONES:
+        if stage <= z["end"]:
+            return z
+    return ZONES[-1]
 
 # 四大屬性（升級 +3 點分配）：key -> (名稱, 效果說明)
 ATTRS = {
@@ -443,16 +477,18 @@ class GameState:
     def spawn_stage(self):
         self.stage_serial += 1
         self.monsters = []
-        if self.stage >= FINAL_STAGE:
+        z = zone_of(self.stage)
+        if self.stage >= z["end"]:
             self.is_boss = True
-            kind, name = FINAL_BOSS
-            hp = MONSTER_BASE_HP * (self.growth ** (FINAL_STAGE - 1)) * FINAL_BOSS_HP_MULT
-            self.monsters.append(self._mk(kind, "【最終BOSS】" + name, hp, boss=True))
+            kind, name = z["boss"]
+            hp = MONSTER_BASE_HP * (self.growth ** (z["end"] - 1)) * FINAL_BOSS_HP_MULT
+            tag = "【最終BOSS】" if z["end"] >= FINAL_STAGE else "【BOSS】"
+            self.monsters.append(self._mk(kind, tag + name, hp, boss=True))
         else:
             self.is_boss = False
             hp = MONSTER_BASE_HP * (self.growth ** (self.stage - 1))
             for _ in range(MONSTERS_PER_STAGE):
-                kind, name = random.choice(MONSTERS)
+                kind, name = random.choice(z["monsters"])
                 self.monsters.append(self._mk(kind, name, hp))
 
     def target(self):
@@ -486,10 +522,11 @@ class GameState:
             return False
         if self.is_boss:
             self.boss_kills += 1
-            self.finished = True
-        else:
-            self.stage += 1
-            self.spawn_stage()
+            if self.stage >= FINAL_STAGE:       # 最後一張地圖的 BOSS → 全破
+                self.finished = True
+                return True
+        self.stage += 1                         # 其餘（含中途地圖的 BOSS）進下一關
+        self.spawn_stage()
         return True
 
     def try_level_up(self):
@@ -856,17 +893,21 @@ class TypingRPG:
 
     # ---------- 背景圖 ----------
     def _load_bg(self):
-        """載入外部背景圖（assets/forest_bg.png）；沒有 Pillow 或檔案則保持手繪森林。"""
+        """載入目前地圖的背景圖；沒有 Pillow 或檔案則退回手繪森林。"""
+        z = zone_of(self.state.stage)
+        self._bg_zone = z["key"]
+        self._bg_crop_y = z.get("crop_y", BG_CROP_Y)
         try:
             from PIL import Image  # noqa
         except ImportError:
             self._bg_src = None
             return
-        if not os.path.exists(BG_IMAGE):
+        path = res_path(os.path.join("assets", z["bg"]))
+        if not os.path.exists(path):
             self._bg_src = None
             return
         try:
-            self._bg_src = Image.open(BG_IMAGE).convert("RGB")
+            self._bg_src = Image.open(path).convert("RGB")
         except Exception:
             self._bg_src = None
             return
@@ -889,7 +930,7 @@ class TypingRPG:
         nw, nh = W, max(1, int(round(ih * sc)))
         im = self._bg_src.resize((nw, nh), Image.LANCZOS)
         if nh >= H:                          # 較高 → 取縱向橫帶
-            top = int((nh - H) * BG_CROP_Y)
+            top = int((nh - H) * getattr(self, "_bg_crop_y", BG_CROP_Y))
             top = max(0, min(nh - H, top))
             im = im.crop((0, top, W, top + H))
         else:                                # 較矮 → 垂直置中，上下留空
@@ -1426,6 +1467,13 @@ class TypingRPG:
         self.frame += 1
         dt = FRAME_MS / 1000.0
         s = self.state
+        # 換地圖 → 重載背景並報幕
+        z = zone_of(s.stage)
+        if z["key"] != getattr(self, "_bg_zone", None):
+            self._load_bg()
+            self._draw_background()
+            self.banner = ("🌿 進入 " + z["name"], 2.4)
+            self.play_sfx("level")
         # 每隻怪物血條平滑；換關瞬間補滿
         if s.stage_serial != self._last_stage_serial:
             self._last_stage_serial = s.stage_serial
@@ -1825,7 +1873,11 @@ class TypingRPG:
                 self.canvas.create_image(h["x"] * S, h["y"] * S, image=img, tags="dyn")
 
         # 左上：關卡進度 + 等級 + 職業（各自一行，避免擁擠）
-        stage_txt = ("⚔ 最終BOSS戰" if boss else f"🗺 {s.stage}/{FINAL_STAGE}")
+        zn = zone_of(s.stage)
+        if boss:
+            stage_txt = "⚔ 最終BOSS戰" if s.stage >= FINAL_STAGE else f"⚔ {zn['name']}BOSS"
+        else:
+            stage_txt = f"🗺 {zn['name']} {s.stage}/{zn['end']}"
         self._text(12, 11, stage_txt, color="#ffe9a8", size=10, anchor="w")
         self._text(12, 27, f"Lv.{s.level}", color=GOLD, size=11, anchor="w")
         self._text(12, 41, s.class_name, color="#eaf0ff", size=9, anchor="w")
